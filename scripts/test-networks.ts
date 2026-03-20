@@ -1,7 +1,7 @@
 import { createPublicClient, http } from "viem";
 import { sepolia } from "viem/chains";
 import { fromViemClient } from "@chainlink/ccip-sdk/viem";
-import { networkInfo, supportedChains, ChainFamily } from "@chainlink/ccip-sdk";
+import { networkInfo, supportedChains } from "@chainlink/ccip-sdk";
 
 console.log("=== CCIP Supported Networks Test ===");
 console.log();
