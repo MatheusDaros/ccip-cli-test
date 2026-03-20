@@ -19,18 +19,32 @@
 - [x] Fee Estimation (`getFee`)
 - [x] Message Building (`sendMessage`)
 - [x] Status Tracking (`getMessageById`)
-- [x] Supported Networks (`networkInfo`, `supportedChains`, `getOnRampForRouter`)
+- [x] Supported Networks (`networkInfo`, `supportedChains`, `getOnRampForRouter`, `getOffRampsForRouter`)
+- [x] ExtraArgs Encoding (`encodeExtraArgs`, `decodeExtraArgs`)
+- [x] Explorer Utilities (`getCCIPExplorerUrl`, `getCCIPExplorerLinks`)
+- [x] Lane Validation (multi-destination onRamp/offRamp lookup)
+- [x] Fee Comparison (across 9 different message configurations)
 
-### Chain Pair
+### Chain Pairs Tested
 
 - **Source Chain**: Ethereum Sepolia
-- **Destination Chain**: Avalanche Fuji
+- **Destination Chains**: Avalanche Fuji, Arbitrum Sepolia, Base Sepolia
 
 ### Transaction Details
 
-- **Transaction Hash**: `0x1b5ded1af1ed52630ffb997b944a3a6bcde846145ac5cf4b691a42b3708c75a1`
-- **Message ID**: `0xd08d412924f27d9622226163a71cc73edfa9c12efae5c57a70e0e9883c23a3ae`
-- **CCIP Explorer**: https://ccip.chain.link/msg/0xd08d412924f27d9622226163a71cc73edfa9c12efae5c57a70e0e9883c23a3ae
+**7 total cross-chain messages sent:**
+
+| # | Variant | Destination | TX Hash | Message ID | Status |
+|---|---|---|---|---|---|
+| 1 | Empty data, gasLimit=200k | Fuji | `0x1b5ded...5db0` | `0xd08d41...3a3ae` | SUCCESS (807s) |
+| 2 | Custom text data | Fuji | `0x934108...5db0` | `0xdc364b...9156` | SENT |
+| 3 | High gas (500k) + out-of-order | Fuji | `0x65e075...70f2` | `0x4df949...cadc` | SENT |
+| 4 | Large payload (512 bytes) | Fuji | `0x392199...c8f0` | `0x39dfd1...cbb6` | SENT |
+| 5 | Minimal (SDK defaults) | Fuji | `0x2cae6e...18ae` | `0x36343b...b7c6` | SENT |
+| 6 | Text data | Arbitrum Sepolia | `0xfcb598...42e9` | `0x38ab73...ac57` | SENT |
+| 7 | Text data | Base Sepolia | `0xf4a30f...7bdb` | `0xbe3314...9cef` | SENT |
+
+**Primary CCIP Explorer link**: https://ccip.chain.link/msg/0xd08d412924f27d9622226163a71cc73edfa9c12efae5c57a70e0e9883c23a3ae
 
 ---
 
@@ -100,20 +114,39 @@
 - The API response (via `getMessageById`) shows the actual fee charged: `236040065245694 wei` (~0.000236 ETH). The `getFee` call returned `236040065245694 wei` — **exact match** to the actual on-chain fee.
 - `getTotalFeesEstimate` exists for more detailed fee info (includes `tokenTransferFee` for token transfers), but it's not prominently documented.
 
+**Fee comparison across configurations** (Sepolia → Fuji):
+
+| Configuration | Fee (ETH) |
+|---|---|
+| gasLimit=0 | 0.000234715807930398 |
+| gasLimit=200k (default) | 0.000236040065245694 |
+| gasLimit=1M | 0.000241337094506882 |
+| gasLimit=5M | ERROR (revert) |
+| 32-byte data | 0.000236043455344422 |
+| 256-byte data | 0.000236067186035512 |
+| 1024-byte data | 0.000236148548404964 |
+| allowOutOfOrderExecution=true | 0.000236040065245694 |
+| allowOutOfOrderExecution=false | 0.000236040065245694 |
+
+**Observations:** Gas limit has the biggest impact on fees (~2.8% increase per 800k gas). Data size has minimal impact (~0.05% for 1KB). `allowOutOfOrderExecution` has zero fee impact. Very high gas limits (5M) cause the router to revert — the SDK doesn't validate this upfront.
+
 ### 4.2 ExtraArgs Configuration
 
 - The `extraArgs` field accepts an object like `{ gasLimit: 200_000n }` or `{ gasLimit: 200_000n, allowOutOfOrderExecution: true }`. The SDK auto-encodes it into the correct format. This is **significantly easier** than manually encoding `Client.EVMExtraArgsV2` in Solidity.
 - `gasLimit` must be `bigint` — TypeScript won't always catch `number` mistakes at compile time (see Section 3.2).
-- There's **no validation** of the gas limit value. Passing `1n` is accepted silently.
+- There's **no validation** of the gas limit value. Passing `1n` is accepted silently. Passing `5_000_000n` causes the CCIP router to revert.
 - Default behavior when `extraArgs` is omitted: the SDK applies sensible defaults. But the defaults aren't documented clearly — you have to read the source to know what `gasLimit` is used if omitted.
 - `allowOutOfOrderExecution` defaults to `true` when not specified (confirmed in the API response for our message).
+- `encodeExtraArgs` / `decodeExtraArgs` round-trip works perfectly. Supports both V1 (gasLimit only) and V2 (gasLimit + allowOutOfOrderExecution). The `_tag` field in decoded output (`EVMExtraArgsV1` vs `EVMExtraArgsV2`) makes version identification easy.
 
 ### 4.3 Status Tracking
 
 - `getMessageById(messageId)` returns a `CCIPRequest` with a `metadata` field containing `status`, `deliveryTime`, etc. This uses the CCIP API under the hood.
 - Status values are well-typed: `SENT`, `SOURCE_FINALIZED`, `COMMITTED`, `BLESSED`, `SUCCESS`, `FAILED`, `VERIFYING`, `VERIFIED`, `UNKNOWN`.
 - There is **no dedicated polling/subscription method** (e.g., `waitForStatus` or `onStatusChange`). You must implement your own polling loop. The `waitFinalized` method exists but only handles source-chain finality, not cross-chain delivery.
-- Our message remained at `SENT` status for >5 minutes on testnet. Cross-chain delivery on Sepolia → Fuji can take 15-30 minutes.
+- Our first message reached `SUCCESS` after **807 seconds** (~13.5 minutes) on Sepolia → Fuji. This is consistent with expected testnet delivery times.
+- Delivery time is returned as a `bigint` in milliseconds via `metadata.deliveryTime` (e.g., `807000n`).
+- `metadata.receiptTransactionHash` provides the destination chain tx hash once delivered (e.g., `0xe4e1c654b3c995691b8b2e6f8df37ef13bd5acf39ec3081aea5b7db4f9bf9151` for our Fuji delivery).
 
 ---
 
@@ -152,7 +185,7 @@ The `scripts/send-ccip-message.ts` in this repo follows the Viem integration gui
 **Actual**: Returns `0x0000000000000000000000000000000000000000` silently. A developer checking lane validity would get a false positive.
 
 **Console output**:
-```
+```text
 Sepolia -> 999999999 (invalid): VALID (onRamp: 0x0000000000000000000000000000000000000000)
 ```
 
@@ -160,7 +193,37 @@ Sepolia -> 999999999 (invalid): VALID (onRamp: 0x0000000000000000000000000000000
 
 **Severity**: Low (workaround: check for zero address), but it violates the principle of least surprise.
 
-### Bug 2: `fromViemClient` Type Error with Standard `createPublicClient`
+### Bug 2: `getCCIPExplorerLinks` Crashes on Standalone Message ID
+
+**Expected**: `getCCIPExplorerLinks(messageId)` should return explorer links for a given message ID.
+
+**Actual**: Throws `TypeError: Cannot read properties of undefined (reading 'messageId')`. The function expects a `CCIPRequest` object, not a plain message ID string, but the type signature isn't clear.
+
+**Console output**:
+```text
+getCCIPExplorerLinks error: Cannot read properties of undefined (reading 'messageId')
+```
+
+**Reproducibility**: 100%.
+
+**Severity**: Low — `getCCIPExplorerUrl(messageId)` works correctly as an alternative.
+
+### Bug 3: `getMessagesInTx` Fails with "tx.logs is not iterable"
+
+**Expected**: `chain.getMessagesInTx({ txHash, router })` should parse CCIP messages from a transaction receipt.
+
+**Actual**: Throws `TypeError: tx.logs is not iterable`. The method appears to expect a different tx format than what the Viem adapter provides.
+
+**Console output**:
+```text
+getMessagesInTx error: tx.logs is not iterable
+```
+
+**Reproducibility**: 100% with the Viem adapter.
+
+**Severity**: Medium — this is a core SDK method that doesn't work with the Viem adapter.
+
+### Bug 4: `fromViemClient` Type Error with Standard `createPublicClient`
 
 **Expected**: `fromViemClient(createPublicClient({ chain: sepolia, transport: http() }))` should compile cleanly.
 
@@ -182,7 +245,7 @@ Sepolia -> 999999999 (invalid): VALID (onRamp: 0x0000000000000000000000000000000
 
 2. **Multi-chain dependency bloat**: Installing `@aptos-labs/ts-sdk`, `@coral-xyz/anchor`, `@solana/web3.js`, `@mysten/sui`, and `@ton/ton` for an EVM-only project adds ~200MB+ of unused code. These should be optional peer dependencies or the SDK should be split into `@chainlink/ccip-sdk-evm`, `@chainlink/ccip-sdk-solana`, etc.
 
-3. **No network name autocomplete**: `networkInfo("avalanche-testnet-fuji")` works, but `networkInfo("arbitrum-mainnet")` throws at runtime. Without a TypeScript union type for valid names, discovering the correct name requires trial-and-error or consulting external docs.
+3. **No network name autocomplete**: `networkInfo("avalanche-testnet-fuji")` works, but names are unpredictable — Arbitrum Sepolia is `"ethereum-testnet-sepolia-arbitrum-1"`, not `"arbitrum-testnet-sepolia"`. BSC testnet is `"binance_smart_chain-testnet"` (with underscore). Without a TypeScript union type or a `listNetworks()` method, discovering the correct name requires trial-and-error or looking up by chain ID: `networkInfo(421614).name`.
 
 4. **Silent acceptance of invalid parameters**: `gasLimit: 1n` passes `getFee` without warning. An invalid dest chain selector returns a zero address from `getOnRampForRouter` instead of throwing. These should be caught early with validation.
 
@@ -195,6 +258,10 @@ Sepolia -> 999999999 (invalid): VALID (onRamp: 0x0000000000000000000000000000000
 3. **`networkInfo()` for chain selectors**: Eliminates the need to look up magic numbers. `networkInfo("avalanche-testnet-fuji").chainSelector` is readable and self-documenting.
 
 4. **`getMessageById` with API metadata**: Being able to check message status with just the message ID (no need to connect to the destination chain) is convenient. The `metadata.status` field tracks the full lifecycle.
+
+5. **`encodeExtraArgs` / `decodeExtraArgs`**: Clean round-trip encoding for extraArgs. The discriminated `_tag` field (`EVMExtraArgsV1` vs `EVMExtraArgsV2`) makes version handling straightforward.
+
+6. **Multi-lane support**: Sending to Fuji, Arbitrum Sepolia, and Base Sepolia all worked with the same API — just swap the `destChainSelector`. The SDK handles router differences transparently.
 
 ### 7.3 Comparison
 

@@ -1,4 +1,4 @@
-import { createPublicClient, http } from "viem";
+import { createPublicClient, http, formatEther } from "viem";
 import { sepolia } from "viem/chains";
 import { fromViemClient } from "@chainlink/ccip-sdk/viem";
 import { networkInfo } from "@chainlink/ccip-sdk";
@@ -45,11 +45,7 @@ try {
   });
 
   console.log("Fee (wei):", fee.toString());
-  console.log(
-    "Fee (ETH):",
-    (Number(fee) / 1e18).toFixed(6),
-    "ETH"
-  );
+  console.log("Fee (ETH):", formatEther(fee), "ETH");
   console.log();
   console.log("Note: getFee returns a single bigint (fee in native token wei).");
   console.log("There is no built-in breakdown between LINK vs native fee.");
