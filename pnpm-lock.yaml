@@ -17,7 +17,7 @@ importers:
         version: 3.1.0(@nomicfoundation/hardhat-verify@3.0.12(hardhat@3.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(bufferutil@4.1.0)(hardhat@3.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(utf-8-validate@6.0.6)
       '@nomicfoundation/hardhat-toolbox-viem':
         specifier: ^5.0.3
-        version: 5.0.3(6cda67741846e2c00e79bb6a9cd2ed8a)
+        version: 5.0.3(kkfqcmryve34klzbqtvw355y2q)
       '@types/node':
         specifier: ^22.19.15
         version: 22.19.15
@@ -27,6 +27,9 @@ importers:
       hardhat:
         specifier: ^3.2.0
         version: 3.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
       typescript:
         specifier: ~5.8.3
         version: 5.8.3
@@ -2034,7 +2037,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@nomicfoundation/hardhat-toolbox-viem@5.0.3(6cda67741846e2c00e79bb6a9cd2ed8a)':
+  '@nomicfoundation/hardhat-toolbox-viem@5.0.3(kkfqcmryve34klzbqtvw355y2q)':
     dependencies:
       '@nomicfoundation/hardhat-ignition': 3.1.0(@nomicfoundation/hardhat-verify@3.0.12(hardhat@3.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(bufferutil@4.1.0)(hardhat@3.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(utf-8-validate@6.0.6)
       '@nomicfoundation/hardhat-ignition-viem': 3.1.0(@nomicfoundation/hardhat-ignition@3.1.0(@nomicfoundation/hardhat-verify@3.0.12(hardhat@3.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(bufferutil@4.1.0)(hardhat@3.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(utf-8-validate@6.0.6))(@nomicfoundation/hardhat-verify@3.0.12(hardhat@3.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)))(@nomicfoundation/hardhat-viem@3.0.4(hardhat@3.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(viem@2.47.5(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)(zod@3.25.76)))(@nomicfoundation/ignition-core@3.1.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(hardhat@3.2.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(viem@2.47.5(bufferutil@4.1.0)(typescript@5.8.3)(utf-8-validate@6.0.6)(zod@3.25.76))
