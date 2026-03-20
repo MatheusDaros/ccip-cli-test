@@ -2,13 +2,19 @@ import { createPublicClient, http, formatEther, formatUnits } from 'viem';
 import { sepolia, avalancheFuji, arbitrumSepolia, baseSepolia } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 
-const account = privateKeyToAccount(`0x${process.env.SEPOLIA_PRIVATE_KEY}`);
+const PRIVATE_KEY = process.env.SEPOLIA_PRIVATE_KEY;
+if (!PRIVATE_KEY) {
+  console.error('Error: Set the SEPOLIA_PRIVATE_KEY environment variable before running this script.');
+  process.exit(1);
+}
+
+const account = privateKeyToAccount(`0x${PRIVATE_KEY.replace(/^0x/, '')}` as `0x${string}`);
 console.log('Wallet address:', account.address);
 console.log('---');
 
 const erc20Abi = [
   { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
-  { name: 'symbol', type: 'function', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ name: '', type: 'string' }] },
+  { name: 'symbol', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'string' }] },
   { name: 'decimals', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint8' }] },
 ] as const;
 

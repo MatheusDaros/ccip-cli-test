@@ -12,7 +12,13 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { networkInfo } from '@chainlink/ccip-sdk';
 import { fromViemClient, viemWallet } from '@chainlink/ccip-sdk/viem';
 
-const account = privateKeyToAccount(`0x${process.env.SEPOLIA_PRIVATE_KEY}`);
+const PRIVATE_KEY = process.env.SEPOLIA_PRIVATE_KEY;
+if (!PRIVATE_KEY) {
+  console.error('Error: Set the SEPOLIA_PRIVATE_KEY environment variable before running this script.');
+  process.exit(1);
+}
+
+const account = privateKeyToAccount(`0x${PRIVATE_KEY.replace(/^0x/, '')}` as `0x${string}`);
 console.log('Wallet address:', account.address);
 
 const FUJI_RPC = 'https://api.avax-test.network/ext/bc/C/rpc';
