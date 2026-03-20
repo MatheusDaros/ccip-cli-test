@@ -24,15 +24,16 @@
 - [x] Explorer Utilities (`getCCIPExplorerUrl`, `getCCIPExplorerLinks`)
 - [x] Lane Validation (multi-destination onRamp/offRamp lookup)
 - [x] Fee Comparison (across 9 different message configurations)
+- [x] Token Transfers (`sendMessage` with `tokenAmounts` for CCIP-BnM burn & mint)
 
 ### Chain Pairs Tested
 
-- **Source Chain**: Ethereum Sepolia
-- **Destination Chains**: Avalanche Fuji, Arbitrum Sepolia, Base Sepolia
+- **Source Chains**: Ethereum Sepolia, Avalanche Fuji
+- **Destination Chains**: Avalanche Fuji, Arbitrum Sepolia, Base Sepolia, Ethereum Sepolia
 
 ### Transaction Details
 
-**7 total cross-chain messages sent:**
+**7 messaging-only cross-chain messages sent:**
 
 | # | Variant | Destination | TX Hash | Message ID | Status |
 |---|---|---|---|---|---|
@@ -43,6 +44,21 @@
 | 5 | Minimal (SDK defaults) | Fuji | `0x2cae6e...18ae` | `0x36343b...b7c6` | SENT |
 | 6 | Text data | Arbitrum Sepolia | `0xfcb598...42e9` | `0x38ab73...ac57` | SENT |
 | 7 | Text data | Base Sepolia | `0xf4a30f...7bdb` | `0xbe3314...9cef` | SENT |
+
+**5 token transfer messages (CCIP-BnM):**
+
+| # | Direction | Amount | Fee | TX Hash | Message ID |
+|---|---|---|---|---|---|
+| 8 | Sepolia → Fuji | 0.5 BnM | 0.000120 ETH | `0x0ad511...d87f` | `0xcab412...377f` |
+| 9 | Sepolia → Arb Sepolia | 0.5 BnM | 0.000134 ETH | `0x25fe2a...22c3` | `0x39aea5...318c` |
+| 10 | Sepolia → Base Sepolia | 0.5 BnM | 0.000238 ETH | `0xd6ada8...0452` | `0x867609...1b97` |
+| 11 | Fuji → Sepolia (reverse) | 0.5 BnM | 0.158682 AVAX | `0xe95c15...e6fd` | `0xac3112...ff59` |
+| 12 | Sepolia → Fuji (LINK fee) | 0.25 BnM | 0.025586 LINK | `0x4ddee6...89f2` | `0x433aab...6c40` |
+
+**Additional on-chain traces:**
+- 3x `drip()` mints of CCIP-BnM on Sepolia
+- 2x `drip()` mints of CCIP-BnM on Fuji
+- 1x failed LINK-as-token transfer attempt (LINK is not a supported CCIP transferable token on the Sepolia→Fuji lane)
 
 **Primary CCIP Explorer link**: https://ccip.chain.link/msg/0xd08d412924f27d9622226163a71cc73edfa9c12efae5c57a70e0e9883c23a3ae
 
@@ -128,7 +144,7 @@
 | allowOutOfOrderExecution=true | 0.000236040065245694 |
 | allowOutOfOrderExecution=false | 0.000236040065245694 |
 
-**Observations:** Gas limit has the biggest impact on fees (~2.8% increase per 800k gas). Data size has minimal impact (~0.05% for 1KB). `allowOutOfOrderExecution` has zero fee impact. Very high gas limits (5M) cause the router to revert — the SDK doesn't validate this upfront.
+**Observations:** Gas limit has the biggest impact on fees (~2.2% increase from 200k to 1M gas). Data size has minimal impact (~0.05% for 1KB). `allowOutOfOrderExecution` has zero fee impact. Very high gas limits (5M) cause the router to revert — the SDK doesn't validate this upfront.
 
 ### 4.2 ExtraArgs Configuration
 
@@ -139,7 +155,17 @@
 - `allowOutOfOrderExecution` defaults to `true` when not specified (confirmed in the API response for our message).
 - `encodeExtraArgs` / `decodeExtraArgs` round-trip works perfectly. Supports both V1 (gasLimit only) and V2 (gasLimit + allowOutOfOrderExecution). The `_tag` field in decoded output (`EVMExtraArgsV1` vs `EVMExtraArgsV2`) makes version identification easy.
 
-### 4.3 Status Tracking
+### 4.3 Token Transfers
+
+- Token transfers use the same `sendMessage` API with a `tokenAmounts` array specifying `{ token, amount }`. The SDK handles ERC-20 approval automatically (via `approveMax` option).
+- Tested CCIP-BnM (Burn & Mint) token across 4 lanes: Sepolia→Fuji, Sepolia→Arbitrum Sepolia, Sepolia→Base Sepolia, and Fuji→Sepolia (reverse direction). All 5 transfers succeeded.
+- Fee estimation via `getFee` was accurate for token transfers too — the returned fee matched the on-chain charge exactly.
+- Fees vary significantly by destination: Sepolia→Fuji was cheapest (0.000120 ETH), Sepolia→Base Sepolia was most expensive (0.000238 ETH), and Fuji→Sepolia cost 0.158682 AVAX.
+- Paying fees in LINK instead of native token works seamlessly — just set `feeToken` to the LINK address. The SDK auto-approves LINK spending on the router.
+- Attempted to transfer LINK as a token (not as fee) — this failed with `"missing revert data"` during `estimateGas`. LINK is not a supported CCIP transferable token on the Sepolia→Fuji lane. The error message is opaque; ideally the SDK would check the supported token list before attempting the transfer.
+- Delivery times for token transfers: Fuji→Sepolia was fastest (~177s), Sepolia→Fuji ranged from ~891s to ~1095s, Sepolia→Arbitrum Sepolia was ~1078s.
+
+### 4.4 Status Tracking
 
 - `getMessageById(messageId)` returns a `CCIPRequest` with a `metadata` field containing `status`, `deliveryTime`, etc. This uses the CCIP API under the hood.
 - Status values are well-typed: `SENT`, `SOURCE_FINALIZED`, `COMMITTED`, `BLESSED`, `SUCCESS`, `FAILED`, `VERIFYING`, `VERIFIED`, `UNKNOWN`.
@@ -193,37 +219,15 @@ Sepolia -> 999999999 (invalid): VALID (onRamp: 0x0000000000000000000000000000000
 
 **Severity**: Low (workaround: check for zero address), but it violates the principle of least surprise.
 
-### Bug 2: `getCCIPExplorerLinks` Crashes on Standalone Message ID
+### Note on Previously Reported Issues
 
-**Expected**: `getCCIPExplorerLinks(messageId)` should return explorer links for a given message ID.
+**`getCCIPExplorerLinks`** and **`getMessagesInTx`** were initially reported as bugs but were actually usage errors:
+- `getCCIPExplorerLinks` expects a `CCIPRequest` object, not a plain message ID string. Use `getCCIPExplorerUrl('msg', messageId)` instead for standalone lookups. The two-argument API `(type, value)` isn't obvious from the function name.
+- `getMessagesInTx` works correctly when called with a tx hash string directly (e.g., `chain.getMessagesInTx('0x1b5...')`), not as an object `{ txHash, router }`. The confusion came from the API surface not being intuitive.
 
-**Actual**: Throws `TypeError: Cannot read properties of undefined (reading 'messageId')`. The function expects a `CCIPRequest` object, not a plain message ID string, but the type signature isn't clear.
+Neither are bugs, but both highlight that the API could be more self-documenting.
 
-**Console output**:
-```text
-getCCIPExplorerLinks error: Cannot read properties of undefined (reading 'messageId')
-```
-
-**Reproducibility**: 100%.
-
-**Severity**: Low — `getCCIPExplorerUrl(messageId)` works correctly as an alternative.
-
-### Bug 3: `getMessagesInTx` Fails with "tx.logs is not iterable"
-
-**Expected**: `chain.getMessagesInTx({ txHash, router })` should parse CCIP messages from a transaction receipt.
-
-**Actual**: Throws `TypeError: tx.logs is not iterable`. The method appears to expect a different tx format than what the Viem adapter provides.
-
-**Console output**:
-```text
-getMessagesInTx error: tx.logs is not iterable
-```
-
-**Reproducibility**: 100% with the Viem adapter.
-
-**Severity**: Medium — this is a core SDK method that doesn't work with the Viem adapter.
-
-### Bug 4: `fromViemClient` Type Error with Standard `createPublicClient`
+### Bug 2: `fromViemClient` Type Error with Standard `createPublicClient`
 
 **Expected**: `fromViemClient(createPublicClient({ chain: sepolia, transport: http() }))` should compile cleanly.
 
@@ -263,6 +267,10 @@ getMessagesInTx error: tx.logs is not iterable
 
 6. **Multi-lane support**: Sending to Fuji, Arbitrum Sepolia, and Base Sepolia all worked with the same API — just swap the `destChainSelector`. The SDK handles router differences transparently.
 
+7. **Token transfers via `tokenAmounts`**: The same `sendMessage` API handles token transfers — just add a `tokenAmounts` array. The SDK auto-approves the token on the router, estimates fees including token transfer costs, and returns the same typed `CCIPRequest`. No separate "transfer" method needed.
+
+8. **LINK fee payment**: Switching from native ETH fees to LINK fees is a one-line change (`feeToken: LINK_ADDRESS`). The SDK handles LINK approval on the router automatically.
+
 ### 7.3 Comparison
 
 No prior experience with other cross-chain SDKs (Wormhole SDK, LayerZero, etc.) to compare against. Within the Chainlink ecosystem, the CCIP SDK is a significant improvement over raw `IRouterClient` contract calls — the message building, fee estimation, and status tracking abstractions save considerable development time.
@@ -277,11 +285,12 @@ No prior experience with other cross-chain SDKs (Wormhole SDK, LayerZero, etc.) 
 - The core workflow (init → build message → send → track) is smooth and well-typed.
 - The Viem adapter pattern is a smart design choice that doesn't force library migration.
 - Fee estimation accuracy is excellent (exact match with on-chain fee).
+- Token transfers work seamlessly through the same `sendMessage` API — no separate method or complex setup needed.
 - Deductions for: ethers.js dependency bloat, multi-chain dependency weight, silent parameter validation failures, and error messages that leak ethers internals.
 
 ### Would I Recommend for Production?
 
 **Yes, with caveats:**
 - **For prototyping and testnet work**: Strongly recommended. The `sendMessage` abstraction and status tracking save hours of boilerplate.
-- **For production**: Recommended if you accept the ethers.js dependency overhead. Monitor bundle size if targeting browser environments. The error handling gaps (invalid router, zero-address responses) should be wrapped with your own validation layer.
+- **For production**: Recommended if you accept the ethers.js dependency overhead. Monitor bundle size if targeting browser environments. The error handling gaps (invalid router, zero-address responses) should be wrapped with your own validation layer. Token transfers (burn & mint) worked reliably across multiple lanes in testing.
 - **For Viem-only stacks**: Recommended with the understanding that ethers types will leak into error handling. Consider wrapping SDK calls with try/catch that normalizes error shapes.
